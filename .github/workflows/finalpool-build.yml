@@ -1,0 +1,74 @@
+name: Build finalpool
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-finalpool:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout finalpool
+        uses: actions/checkout@v4
+        with:
+          ref: finalpool
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Assemble implemented tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin --prune
+          rm -rf tasks/finalpool
+          mkdir -p tasks/finalpool
+
+          while IFS='|' read -r source dev_dir task_names; do
+            [ -z "$source" ] && continue
+
+            worktree="/tmp/worktree-${source}"
+            rm -rf "$worktree"
+            git worktree add --detach "$worktree" "origin/${source}" >/dev/null
+
+            IFS=',' read -ra tasks <<< "$task_names"
+            for task in "${tasks[@]}"; do
+              if [[ -z "$task" ]]; then continue; fi
+              source_dir="${worktree}/tasks/${dev_dir}/${task}"
+              if [[ ! -d "$source_dir" ]]; then
+                echo "Missing ${source_dir}" >&2
+                exit 1
+              fi
+              cp -a "$source_dir" "tasks/finalpool/"
+            done
+
+            git worktree remove --force "$worktree"
+          done <<'TASK_SPECS'
+          fan-dev|fan|coupon-manager,discount-calculator,loyalty-program,price-tracker
+          gyy|gyy|blog-engine,cms-builder,content-scheduler,robots-handler,social-publisher,tag-manager
+          haoze|haoze|media-organizer,streaming-service,subtitle-generator,video-trimmer
+          jl_dev|jl|canvas-grade-automation,customer-feedback-processor,email-classification-system,inventory-management,pdf-report-generator
+          junteng_dev|junteng|booking-system,calendar-sync,contact-manager,help-desk,order-processor,product-catalog,reminder-service,shipment-tracker
+          junxian_dev|junxian|qr-generator,social-connector,translation-api
+          lueyang-dev|lueyang|activity-logger,crm-system,deal-manager,email-campaign,follow-up-reminder,sales-pipeline,territory-manager
+          lv|lv|analytics-dashboard,chat-bot,feedback-collector,personalization-service,sentiment-analyzer,survey-builder,voice-processor
+          ruige|ruige|canvas-automation,data-analytics,expense-tracker,file-manager,log-analyzer,web-crawler
+          wenshuo-dev|wenshuo|cache-optimizer,image-processor,scheduler,search-engine
+          xiaochen_dev|xiaochen|backup-utility,deployment-tool,error-tracker,health-monitor,monitoring-agent,security-scanner,status-checker
+          yuxuan-dev|yuxuan|asset-optimizer,content-manager,network-analyzer,sync-service,task-scheduler
+          yuzhen-dev|yuzhen|alert-system,data-validator,form-builder,invoice-generator,payment-processor,permission-manager
+          zhaochen|zhaochen|certificate-manager,load-balancer,storage-manager,template-engine
+          TASK_SPECS
+
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add tasks/finalpool
+            git commit -m "Add implemented tasks to finalpool"
+            git push origin HEAD:finalpool
+          else
+            echo "No finalpool task changes were found." >&2
+            exit 1
+          fi
